@@ -1,0 +1,21 @@
+[package]
+name = "aoctool"
+version = "0.1.0"
+authors = ["Peter Goodspeed-Niklaus <peter.r.goodspeedniklaus@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+aoclib = { git = "https://github.com/coriolinus/aocutil.git" }
+chrono = "0.4.19"
+color-eyre = "0.5.10"
+path-absolutize = "3.0.6"
+serde = { version = "1.0.118", features = [ "derive" ] }
+structopt = "0.3.21"
+thiserror = "1.0.22"
+tinytemplate = "1.1.0"
+toml = "0.5.8"
+toml_edit = "0.2.0"
+
+[[bin]]
+name = "aoc"
+path = "src/main.rs"
