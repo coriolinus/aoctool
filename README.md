@@ -8,13 +8,13 @@ files and create Rust project templates.
 ### Simple
 
 ```sh
-cargo install --git "$TODO_URL"
+cargo install --git "https://github.com/coriolinus/aoctool.git"
 ```
 
 ### Your Fork
 
 ```sh
-git clone "$TODO_URL" aoctool
+git clone "https://github.com/coriolinus/aoctool.git" aoctool
 cd aoctool
 # optional: edit template, etc
 cargo install --path .
