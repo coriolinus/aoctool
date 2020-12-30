@@ -7,34 +7,17 @@ use toml_edit::Document;
 
 use aoclib::config::Config;
 
-const EXPECT_PACKAGE: &str = env!("CARGO_PKG_NAME");
-
-/// ensure we're in the correct directory by verifying the package name in `Cargo.toml`
-fn ensure_correct_dir(current_dir: &Path) -> Result<(PathBuf, Document), Error> {
+/// Get `Cargo.toml` of the implementation directory.
+///
+/// Return its path and the parsed `Document`.
+fn get_cargo_toml(config: &Config, year: u32) -> Result<(PathBuf, Document), Error> {
     // parse the local Cargo.toml to discover if we're in the right place
-    let cargo_toml_path = current_dir.join("Cargo.toml");
+    let cargo_toml_path = config.implementation(year).join("Cargo.toml");
     if !cargo_toml_path.exists() {
         Err(Error::NoCargoToml)?;
     }
     let manifest = Document::from_str(&std::fs::read_to_string(&cargo_toml_path)?)?;
 
-    fn get_package_name(manifest: &Document) -> Option<&str> {
-        manifest
-            .root
-            .as_table()
-            .expect("document root is a table")
-            .get("package")?
-            .as_table_like()?
-            .get("name")?
-            .as_value()?
-            .as_str()
-    }
-
-    let found_package_name = get_package_name(&manifest).ok_or(Error::MalformedToml)?;
-
-    if found_package_name != EXPECT_PACKAGE {
-        Err(Error::WrongPackage(found_package_name.to_string()))?;
-    }
     Ok((cargo_toml_path, manifest))
 }
 
@@ -129,12 +112,13 @@ fn render_templates_into(
 /// - downloading the puzzle input
 pub fn initialize(
     config: &Config,
+    year: u32,
     day: u8,
     skip_create_crate: bool,
     skip_get_input: bool,
 ) -> Result<(), Error> {
     let current_dir = std::env::current_dir()?;
-    let (cargo_toml_path, mut manifest) = ensure_correct_dir(&current_dir)?;
+    let (cargo_toml_path, mut manifest) = get_cargo_toml(config, year)?;
 
     if !skip_create_crate {
         // set up new sub-crate basics
@@ -151,7 +135,7 @@ pub fn initialize(
 
     if !skip_get_input {
         // download the input
-        aoclib::website::get_input(config, day)?;
+        aoclib::website::get_input(config, year, day)?;
     }
 
     Ok(())
@@ -167,11 +151,6 @@ pub enum Error {
     ParseToml(#[from] toml_edit::TomlError),
     #[error("Cargo.toml is malformed")]
     MalformedToml,
-    #[error(
-        "working dir must be root of package {} but is actually {0}",
-        EXPECT_PACKAGE
-    )]
-    WrongPackage(String),
     #[error("failed to write updated Cargo.toml")]
     CargoTomlWrite(#[from] toml::ser::Error),
     #[error("template error for {1}")]
