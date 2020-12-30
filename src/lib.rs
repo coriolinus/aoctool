@@ -7,6 +7,8 @@ use toml_edit::Document;
 
 use aoclib::config::Config;
 
+const TEMPLATE_FILES: &[&str] = &["Cargo.toml", "src/lib.rs", "src/main.rs"];
+
 /// Get `Cargo.toml` of the implementation directory.
 ///
 /// Return its path and the parsed `Document`.
@@ -61,9 +63,44 @@ fn add_crate_to_workspace(
     Ok(())
 }
 
+/// Ensure the template directory from the configuration exists and is initialized.
+fn ensure_template_dir(config: &Config, year: u32) -> Result<PathBuf, Error> {
+    let template_dir = config.day_template(year);
+    if !template_dir.exists() {
+        std::fs::create_dir_all(&template_dir)?;
+    }
+    for template in TEMPLATE_FILES {
+        let template_path = template_dir.join(template);
+        if !template_path.exists() {
+            let url = format!(
+                "https://raw.githubusercontent.com/coriolinus/aoctool/master/day-template/{}",
+                template
+            );
+            let client = reqwest::blocking::Client::builder()
+                .gzip(true)
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .map_err(Error::ClientBuilder)?;
+            let mut response = client
+                .get(&url)
+                .send()
+                .map_err(Error::RequestingInput)?
+                .error_for_status()
+                .map_err(Error::ResponseStatus)?;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(template_path)?;
+            response.copy_to(&mut file).map_err(Error::Downloading)?;
+        }
+    }
+    Ok(template_dir)
+}
+
 fn render_templates_into(
-    current_dir: &Path,
+    config: &Config,
     day_dir: &Path,
+    year: u32,
     day: u8,
     day_name: &str,
 ) -> Result<(), Error> {
@@ -81,8 +118,8 @@ fn render_templates_into(
     };
 
     // render templates
-    let template_dir = current_dir.join("day-template");
-    for template in &["Cargo.toml", "src/lib.rs", "src/main.rs"] {
+    let template_dir = ensure_template_dir(config, year)?;
+    for template in TEMPLATE_FILES {
         let mut tt = TinyTemplate::new();
         let template_text = std::fs::read_to_string(template_dir.join(template))?;
         tt.add_template(template, &template_text)
@@ -117,20 +154,20 @@ pub fn initialize(
     skip_create_crate: bool,
     skip_get_input: bool,
 ) -> Result<(), Error> {
-    let current_dir = std::env::current_dir()?;
+    let implementation_dir = config.implementation(year);
     let (cargo_toml_path, mut manifest) = get_cargo_toml(config, year)?;
 
     if !skip_create_crate {
         // set up new sub-crate basics
         let day_name = format!("day{:02}", day);
-        let day_dir = current_dir.join(&day_name);
+        let day_dir = implementation_dir.join(&day_name);
         std::fs::create_dir_all(day_dir.join("src"))?;
 
         // update the workspaces of this crate
         add_crate_to_workspace(&cargo_toml_path, &mut manifest, &day_name)?;
 
         // render templates, creating new sub-crate
-        render_templates_into(&current_dir, &day_dir, day, &day_name)?;
+        render_templates_into(config, &day_dir, year, day, &day_name)?;
     }
 
     if !skip_get_input {
@@ -159,4 +196,12 @@ pub enum Error {
     GetInput(#[from] aoclib::website::Error),
     #[error("crate already exists in workspace: {0}")]
     CrateAlreadyExists(String),
+    #[error("building request client for day template download")]
+    ClientBuilder(#[source] reqwest::Error),
+    #[error("requesting day template file")]
+    RequestingInput(#[source] reqwest::Error),
+    #[error("response status unsuccessful requesting day template")]
+    ResponseStatus(#[source] reqwest::Error),
+    #[error("downloading day template to local file")]
+    Downloading(#[source] reqwest::Error),
 }
