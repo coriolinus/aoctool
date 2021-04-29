@@ -1,6 +1,7 @@
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::{io::Write, path::{Path, PathBuf}};
 use std::str::FromStr;
+use structopt::StructOpt;
 use thiserror::Error;
 use tinytemplate::TinyTemplate;
 use toml_edit::Document;
@@ -31,7 +32,7 @@ fn add_crate_to_workspace(
     let root_table = manifest
         .root
         .as_table_mut()
-        .expect("docuemnt root is a table");
+        .expect("document root is a table");
 
     let workspace = root_table.entry("workspace");
     if workspace.is_none() {
@@ -104,8 +105,6 @@ fn render_templates_into(
     day: u8,
     day_name: &str,
 ) -> Result<(), Error> {
-    use std::io::Write;
-
     #[derive(Serialize)]
     struct Context {
         day: u8,
@@ -178,6 +177,83 @@ pub fn initialize(
     Ok(())
 }
 
+/// Initialize a new year.
+///
+/// This entails:
+///
+/// - Configure various paths as desired.
+/// - Ensure the implementation directory exists.
+/// - If implementation directory does not exist, create a rust project there.
+/// - Ensure the inputs directory exists.
+/// - Ensure the inputs directory is present in `"$implementation/.gitignore"`
+pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> Result<(), Error> {
+    {
+        // ensure all specified paths exist and are configured appropriately.
+        let ensure_path = |maybe_path: Option<PathBuf>,
+                           path_destination: &mut Option<PathBuf>|
+         -> std::io::Result<()> {
+            match (maybe_path, &path_destination) {
+                (Some(desired_path), None) => {
+                    // if we have a desired path and no appropriate path has already been configured,
+                    // then:
+                    if !desired_path.exists() {
+                        std::fs::create_dir_all(&desired_path)?;
+                    }
+                    *path_destination = Some(desired_path.canonicalize()?);
+                }
+                _ => {
+                    // take no action in any other case
+                }
+            }
+            Ok(())
+        };
+
+        let paths = config.paths.entry(year).or_default();
+        ensure_path(path_opts.input_files, &mut paths.input_files)?;
+        ensure_path(path_opts.implementation, &mut paths.implementation)?;
+        ensure_path(path_opts.day_templates, &mut paths.day_template)?;
+    }
+
+    let impl_path = config.implementation(year);
+
+    // Create a new Rust project as required.
+    // This creates `Cargo.toml` and `.gitignore`, as well as some more basic scaffolding.
+    if !impl_path.exists() {
+        std::process::Command::new("cargo")
+            .arg("new")
+            .arg("--name")
+            .arg(format!("aoc{}", year))
+            .arg("--lib")
+            .arg(&impl_path)
+            .status()?;
+
+        // remove the default src folder
+        let src_path = impl_path.join("src");
+        if src_path.exists() && src_path.is_dir() {
+            std::fs::remove_dir_all(src_path)?;
+        }
+    }
+
+    // don't need to mess with Cargo.toml right now; daily initializer should be able to handle
+    // creating/editing the workspace members array just fine.
+
+    // ensure inputs dir is in gitignore if it is (as per the default) a sub-directory of the
+    // implementation dir
+    if let Some(input_files_relative) = pathdiff::diff_paths(config.input_files(year), config.implementation(year)) {
+        if !input_files_relative.starts_with("..") {
+            use std::os::unix::ffi::OsStrExt;
+
+            // input files relative is a sub-directory of implementation dir
+            let mut gitignore = std::fs::OpenOptions::new().create(true).append(true).open(impl_path.join(".gitignore"))?;
+            let mut buffer = input_files_relative.as_os_str().as_bytes().to_owned();
+            buffer.push(b'\n');
+            gitignore.write_all(&buffer)?;
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
@@ -204,4 +280,19 @@ pub enum Error {
     ResponseStatus(#[source] reqwest::Error),
     #[error("downloading day template to local file")]
     Downloading(#[source] reqwest::Error),
+}
+
+#[derive(StructOpt, Debug)]
+pub struct PathOpts {
+    /// Path to input files. Default: "$(pwd)/inputs"
+    #[structopt(long, parse(from_os_str))]
+    pub input_files: Option<PathBuf>,
+
+    /// Path to this year's implementation directory. Default: "$(pwd)"
+    #[structopt(long, parse(from_os_str))]
+    pub implementation: Option<PathBuf>,
+
+    /// Path to this year's day template files.
+    #[structopt(long, parse(from_os_str))]
+    pub day_templates: Option<PathBuf>,
 }

@@ -60,6 +60,7 @@ dependencies = [
  "chrono",
  "color-eyre",
  "path-absolutize",
+ "pathdiff",
  "reqwest",
  "serde",
  "structopt",
@@ -1064,6 +1065,12 @@ checksum = "658c6e985fce9c25289fe7c86c08a3cbe82c19a3cd5b3bc5945c8c632552e460"
 dependencies = [
  "once_cell",
 ]
+
+[[package]]
+name = "pathdiff"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "877630b3de15c0b64cc52f659345724fbf6bdad9bd9566699fc53688f3c34a34"
 
 [[package]]
 name = "percent-encoding"
