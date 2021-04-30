@@ -1,7 +1,9 @@
 # `aoctool`: Advent of Code Downloader / Initializer
 
-This tool contains the necessary scaffolding to download Advent of Code input
-files and create Rust project templates.
+This tool contains the necessary scaffolding to download Advent of Code input files and create Rust
+project templates.
+
+Windows is not supported except via WSL.
 
 ## Installation
 
@@ -22,39 +24,41 @@ cargo install --path .
 
 ## Initial setup
 
-Log in to the AoC site with whatever method you prefer. Then use the browser's dev tools to
-inspect the cookies. You want the one called `session`. Configure this tool with it,
-so it can download the inputs for you.
+Log in to the AoC site with whatever method you prefer. Then use the browser's dev tools to inspect
+the cookies. You want the one called `session`. Configure this tool with it, so it can download the
+inputs for you.
 
 ```bash
 aoc config set --session "$SESSION"
 ```
 
-### TODO:
+### Annual Setup
 
 If desired, initialize a top-level workspace in the current directory with
 
 ```bash
-aoc year-init
+aoc init-year
 ```
 
-### Other Options
-
-If desired, you can specify a particular canonical path where input files
-should be stored:
+That subcommand allows for inline configuration of templates, implementations, etc on a per-year
+basis. To explore those options:
 
 ```bash
-aoc config set --inputs "$DESIRED_PATH"
+aoc init-year --help
 ```
 
-#### TODO:
+The paths to the day's template files, to the implementation directory, and to the input files can
+all be configured on an annual basis. For details, see
 
-set a config option from which the templates should be loaded
+```bash
+aoc config set --help
+```
 
-- if the specified location does not exist, it is created
-- for each file in the default templates, if it does not exist in the dest
-directory, it is copied from the default
-- no file is ever clobbered
+or edit the configuration directly with
+
+```bash
+open "$(aoc config path)"
+```
 
 ## Per-day templating
 
@@ -62,10 +66,10 @@ directory, it is copied from the default
 aoc init
 ```
 
-Assuming the current directory is a cargo workspace, this command will  create
-a new sub-crate and add it to the workspace, as well as downloading the
-problem's input. Inputs are saved to a canonical directory. The sub-crate will
-be named for the day in question, so it can then be run like
+Within the configured year (if set) or in the current directory, this command will create a new
+sub-crate and add it to the workspace, as well as downloading the problem's input. Inputs are saved
+to a canonical directory. The sub-crate will be named for the day in question, so it can then be run
+like
 
 ```bash
 cargo run -p day01 -- --part2
