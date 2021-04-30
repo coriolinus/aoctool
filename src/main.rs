@@ -1,8 +1,8 @@
 use aoclib::config::Config;
+use aoctool::PathOpts;
 use chrono::{Datelike, Local};
 use color_eyre::eyre::{bail, Result};
 use path_absolutize::Absolutize;
-use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Clone, Copy, Debug)]
@@ -64,6 +64,13 @@ enum Subcommand {
         #[structopt(long)]
         skip_get_input: bool,
     },
+    /// Initialize a repository for a year's solutions
+    InitYear {
+        #[structopt(flatten)]
+        year: Year,
+        #[structopt(flatten)]
+        path_opts: PathOpts,
+    },
 }
 
 impl Subcommand {
@@ -89,6 +96,12 @@ impl Subcommand {
                 )?;
                 Ok(())
             }
+            Self::InitYear { year, path_opts } => {
+                let mut config = Config::load().unwrap_or_default();
+                aoctool::initialize_year(&mut config, year.year(), path_opts)?;
+                config.save()?;
+                Ok(())
+            }
         }
     }
 }
@@ -110,17 +123,8 @@ enum ConfigOpts {
         #[structopt(short, long)]
         session: Option<String>,
 
-        /// Path to input files. Default: "$(pwd)/inputs"
-        #[structopt(long, parse(from_os_str))]
-        input_files: Option<PathBuf>,
-
-        /// Path to this year's implementation directory. Default: "$(pwd)"
-        #[structopt(long, parse(from_os_str))]
-        implementation: Option<PathBuf>,
-
-        /// Path to this year's day template files.
-        #[structopt(long, parse(from_os_str))]
-        day_templates: Option<PathBuf>,
+        #[structopt(flatten)]
+        path_opts: PathOpts,
     },
     /// Clear configuration
     Clear {
@@ -152,9 +156,12 @@ impl ConfigOpts {
             Self::Set {
                 year,
                 session,
-                input_files,
-                implementation,
-                day_templates,
+                path_opts:
+                    PathOpts {
+                        input_files,
+                        implementation,
+                        day_templates,
+                    },
             } => {
                 let mut config = Config::load().unwrap_or_default();
                 if let Some(session) = session {

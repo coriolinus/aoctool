@@ -1,6 +1,11 @@
+use path_absolutize::Absolutize;
 use serde::Serialize;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::{
+    io::{BufRead, BufReader, BufWriter, Write},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
+use structopt::StructOpt;
 use thiserror::Error;
 use tinytemplate::TinyTemplate;
 use toml_edit::Document;
@@ -31,7 +36,7 @@ fn add_crate_to_workspace(
     let root_table = manifest
         .root
         .as_table_mut()
-        .expect("docuemnt root is a table");
+        .expect("document root is a table");
 
     let workspace = root_table.entry("workspace");
     if workspace.is_none() {
@@ -104,8 +109,6 @@ fn render_templates_into(
     day: u8,
     day_name: &str,
 ) -> Result<(), Error> {
-    use std::io::Write;
-
     #[derive(Serialize)]
     struct Context {
         day: u8,
@@ -178,6 +181,141 @@ pub fn initialize(
     Ok(())
 }
 
+/// Check the path provided for the specified line.
+///
+/// If the path specified does not exist, or does not contain that line, the line is appended.
+/// A newline is added to the input line.
+fn append_if_not_present<P, L>(path: P, line: L) -> Result<(), Error>
+where
+    P: AsRef<Path>,
+    L: AsRef<[u8]>,
+{
+    // note that we have to work with the file as binary due to the possibility
+    // that it is not utf-8.
+    let mut line = line.as_ref().to_vec();
+    line.push(b'\n');
+
+    let contains_line = {
+        std::fs::File::open(&path)
+            .map(|file| {
+                let mut reader = BufReader::new(file);
+                let mut line_buffer = Vec::new();
+                while let Ok(read_bytes) = reader.read_until(b'\n', &mut line_buffer) {
+                    if read_bytes == 0 {
+                        break;
+                    }
+                    if line_buffer == line {
+                        return true;
+                    }
+                    line_buffer.clear();
+                }
+                false
+            })
+            .unwrap_or_default()
+    };
+    if !contains_line {
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        file.write_all(&line)?;
+    }
+    Ok(())
+}
+
+/// Initialize a new year.
+///
+/// This entails:
+///
+/// - Configure various paths as desired.
+/// - If implementation directory does not exist, or is empty, create a rust workspace there.
+/// - Ensure the inputs directory is present in `"$implementation/.gitignore"` if it is a
+///   subdirectory of the implementation.
+pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> Result<(), Error> {
+    {
+        // ensure all specified paths exist and are configured appropriately.
+        let ensure_path = |maybe_path: Option<PathBuf>,
+                           path_destination: &mut Option<PathBuf>|
+         -> Result<(), Error> {
+            match (&maybe_path, &path_destination) {
+                (Some(desired_path), None) => {
+                    // if we have a desired path and no appropriate path has already been configured,
+                    // then:
+                    if !desired_path.exists() {
+                        std::fs::create_dir_all(&desired_path)?;
+                    }
+                    *path_destination = Some(desired_path.canonicalize()?);
+                }
+                (Some(desired_path), Some(configured_path))
+                    if desired_path.absolutize()? != configured_path.absolutize()? =>
+                {
+                    return Err(Error::ConfigCliConflict(
+                        desired_path.display().to_string(),
+                        configured_path.display().to_string(),
+                    ));
+                }
+                _ => {
+                    // take no action in any other case
+                }
+            }
+            Ok(())
+        };
+
+        let paths = config.paths.entry(year).or_default();
+        ensure_path(path_opts.input_files, &mut paths.input_files)?;
+        ensure_path(path_opts.implementation, &mut paths.implementation)?;
+        ensure_path(path_opts.day_templates, &mut paths.day_template)?;
+    }
+
+    let impl_path = config.implementation(year);
+
+    // Create a new Rust project as required.
+    // "Required" means that the target either does not exist, or is an empty directory.
+    // This creates `Cargo.toml` and `.gitignore`.
+    if !impl_path.exists()
+        || (impl_path.is_dir()
+            && std::fs::read_dir(&impl_path)
+                .map(|mut dir_iter| dir_iter.next().is_none())
+                .unwrap_or_default())
+    {
+        std::fs::create_dir_all(&impl_path)?;
+
+        // Create default .gitignore
+        append_if_not_present(impl_path.join(".gitignore"), "/target/")?;
+
+        // create default `Cargo.toml` if not present.
+        // Becuase `Cargo.toml` has more complicated semantics, we can't just append.
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(impl_path.join("Cargo.toml"))
+        {
+            let mut buffer = BufWriter::new(file);
+            writeln!(&mut buffer, "[workspace]")?;
+            writeln!(&mut buffer, "members = []")?;
+        }
+    }
+
+    // ensure inputs dir is in gitignore if it is (as per the default) a sub-directory of the
+    // implementation dir
+    if let Some(input_files_relative) =
+        pathdiff::diff_paths(config.input_files(year), config.implementation(year))
+    {
+        // input files relative is a sub-directory of implementation dir
+        // if not already present, add an appropriate ignore line
+        if !input_files_relative.starts_with("..") {
+            use std::os::unix::ffi::OsStrExt;
+
+            // add a trailing slash to narrow the gitignore rule to directories
+            let mut input_files_relative = input_files_relative.as_os_str().as_bytes().to_vec();
+            input_files_relative.push(b'/');
+            append_if_not_present(impl_path.join(".gitignore"), input_files_relative)?;
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
@@ -204,4 +342,21 @@ pub enum Error {
     ResponseStatus(#[source] reqwest::Error),
     #[error("downloading day template to local file")]
     Downloading(#[source] reqwest::Error),
+    #[error("CLI requested '{0}' but config file specified '{1}'")]
+    ConfigCliConflict(String, String),
+}
+
+#[derive(StructOpt, Debug)]
+pub struct PathOpts {
+    /// Path to input files. Default: "$(pwd)/inputs"
+    #[structopt(long, parse(from_os_str))]
+    pub input_files: Option<PathBuf>,
+
+    /// Path to this year's implementation directory. Default: "$(pwd)"
+    #[structopt(long, parse(from_os_str))]
+    pub implementation: Option<PathBuf>,
+
+    /// Path to this year's day template files.
+    #[structopt(long, parse(from_os_str))]
+    pub day_templates: Option<PathBuf>,
 }
