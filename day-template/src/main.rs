@@ -5,6 +5,7 @@ use color_eyre::eyre::Result;
 use structopt::StructOpt;
 use std::path::PathBuf;
 
+const YEAR: u32 = {year};
 const DAY: u8 = {day};
 
 #[derive(StructOpt, Debug)]
@@ -29,8 +30,8 @@ impl RunArgs \{
                 let config = Config::load()?;
                 // this does nothing if the input file already exists, but
                 // simplifies the workflow after cloning the repo on a new computer
-                get_input(&config, DAY)?;
-                Ok(config.input_for(DAY))
+                get_input(&config, YEAR, DAY)?;
+                Ok(config.input_for(YEAR, DAY))
             }
             Some(ref path) => Ok(path.clone()),
         }

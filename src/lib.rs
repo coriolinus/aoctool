@@ -111,11 +111,13 @@ fn render_templates_into(
 ) -> Result<(), Error> {
     #[derive(Serialize)]
     struct Context {
+        year: u32,
         day: u8,
         package_name: String,
     }
 
     let context = Context {
+        year,
         day,
         package_name: day_name.to_string(),
     };
