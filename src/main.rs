@@ -106,8 +106,6 @@ impl Subcommand {
     }
 }
 
-
-
 #[derive(StructOpt, Debug)]
 enum ConfigOpts {
     /// Emit the path to the configuration file
@@ -158,11 +156,12 @@ impl ConfigOpts {
             Self::Set {
                 year,
                 session,
-                path_opts: PathOpts {
-                    input_files,
-                    implementation,
-                    day_templates,
-                }
+                path_opts:
+                    PathOpts {
+                        input_files,
+                        implementation,
+                        day_templates,
+                    },
             } => {
                 let mut config = Config::load().unwrap_or_default();
                 if let Some(session) = session {

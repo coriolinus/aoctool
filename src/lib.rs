@@ -1,6 +1,10 @@
+use path_absolutize::Absolutize;
 use serde::Serialize;
-use std::{io::Write, path::{Path, PathBuf}};
-use std::str::FromStr;
+use std::{
+    io::{BufRead, BufReader, BufWriter, Write},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use structopt::StructOpt;
 use thiserror::Error;
 use tinytemplate::TinyTemplate;
@@ -177,22 +181,63 @@ pub fn initialize(
     Ok(())
 }
 
+/// Check the path provided for the specified line.
+///
+/// If the path specified does not exist, or does not contain that line, the line is appended.
+/// A newline is added to the input line.
+fn append_if_not_present<P, L>(path: P, line: L) -> Result<(), Error>
+where
+    P: AsRef<Path>,
+    L: AsRef<[u8]>,
+{
+    // note that we have to work with the file as binary due to the possibility
+    // that it is not utf-8.
+    let mut line = line.as_ref().to_vec();
+    line.push(b'\n');
+
+    let contains_line = {
+        std::fs::File::open(&path)
+            .map(|file| {
+                let mut reader = BufReader::new(file);
+                let mut line_buffer = Vec::new();
+                while let Ok(read_bytes) = reader.read_until(b'\n', &mut line_buffer) {
+                    if read_bytes == 0 {
+                        break;
+                    }
+                    if line_buffer == line {
+                        return true;
+                    }
+                    line_buffer.clear();
+                }
+                false
+            })
+            .unwrap_or_default()
+    };
+    if !contains_line {
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        file.write_all(&line)?;
+    }
+    Ok(())
+}
+
 /// Initialize a new year.
 ///
 /// This entails:
 ///
 /// - Configure various paths as desired.
-/// - Ensure the implementation directory exists.
-/// - If implementation directory does not exist, create a rust project there.
-/// - Ensure the inputs directory exists.
-/// - Ensure the inputs directory is present in `"$implementation/.gitignore"`
+/// - If implementation directory does not exist, or is empty, create a rust workspace there.
+/// - Ensure the inputs directory is present in `"$implementation/.gitignore"` if it is a
+///   subdirectory of the implementation.
 pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> Result<(), Error> {
     {
         // ensure all specified paths exist and are configured appropriately.
         let ensure_path = |maybe_path: Option<PathBuf>,
                            path_destination: &mut Option<PathBuf>|
-         -> std::io::Result<()> {
-            match (maybe_path, &path_destination) {
+         -> Result<(), Error> {
+            match (&maybe_path, &path_destination) {
                 (Some(desired_path), None) => {
                     // if we have a desired path and no appropriate path has already been configured,
                     // then:
@@ -200,6 +245,14 @@ pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> R
                         std::fs::create_dir_all(&desired_path)?;
                     }
                     *path_destination = Some(desired_path.canonicalize()?);
+                }
+                (Some(desired_path), Some(configured_path))
+                    if desired_path.absolutize()? != configured_path.absolutize()? =>
+                {
+                    return Err(Error::ConfigCliConflict(
+                        desired_path.display().to_string(),
+                        configured_path.display().to_string(),
+                    ));
                 }
                 _ => {
                     // take no action in any other case
@@ -217,37 +270,46 @@ pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> R
     let impl_path = config.implementation(year);
 
     // Create a new Rust project as required.
-    // This creates `Cargo.toml` and `.gitignore`, as well as some more basic scaffolding.
-    if !impl_path.exists() {
-        std::process::Command::new("cargo")
-            .arg("new")
-            .arg("--name")
-            .arg(format!("aoc{}", year))
-            .arg("--lib")
-            .arg(&impl_path)
-            .status()?;
+    // "Required" means that the target either does not exist, or is an empty directory.
+    // This creates `Cargo.toml` and `.gitignore`.
+    if !impl_path.exists()
+        || (impl_path.is_dir()
+            && std::fs::read_dir(&impl_path)
+                .map(|mut dir_iter| dir_iter.next().is_none())
+                .unwrap_or_default())
+    {
+        std::fs::create_dir_all(&impl_path)?;
 
-        // remove the default src folder
-        let src_path = impl_path.join("src");
-        if src_path.exists() && src_path.is_dir() {
-            std::fs::remove_dir_all(src_path)?;
+        // Create default .gitignore
+        append_if_not_present(impl_path.join(".gitignore"), "/target/")?;
+
+        // create default `Cargo.toml` if not present.
+        // Becuase `Cargo.toml` has more complicated semantics, we can't just append.
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(impl_path.join("Cargo.toml"))
+        {
+            let mut buffer = BufWriter::new(file);
+            writeln!(&mut buffer, "[workspace]")?;
+            writeln!(&mut buffer, "members = []")?;
         }
     }
 
-    // don't need to mess with Cargo.toml right now; daily initializer should be able to handle
-    // creating/editing the workspace members array just fine.
-
     // ensure inputs dir is in gitignore if it is (as per the default) a sub-directory of the
     // implementation dir
-    if let Some(input_files_relative) = pathdiff::diff_paths(config.input_files(year), config.implementation(year)) {
+    if let Some(input_files_relative) =
+        pathdiff::diff_paths(config.input_files(year), config.implementation(year))
+    {
+        // input files relative is a sub-directory of implementation dir
+        // if not already present, add an appropriate ignore line
         if !input_files_relative.starts_with("..") {
             use std::os::unix::ffi::OsStrExt;
 
-            // input files relative is a sub-directory of implementation dir
-            let mut gitignore = std::fs::OpenOptions::new().create(true).append(true).open(impl_path.join(".gitignore"))?;
-            let mut buffer = input_files_relative.as_os_str().as_bytes().to_owned();
-            buffer.push(b'\n');
-            gitignore.write_all(&buffer)?;
+            // add a trailing slash to narrow the gitignore rule to directories
+            let mut input_files_relative = input_files_relative.as_os_str().as_bytes().to_vec();
+            input_files_relative.push(b'/');
+            append_if_not_present(impl_path.join(".gitignore"), input_files_relative)?;
         }
     }
 
@@ -280,6 +342,8 @@ pub enum Error {
     ResponseStatus(#[source] reqwest::Error),
     #[error("downloading day template to local file")]
     Downloading(#[source] reqwest::Error),
+    #[error("CLI requested '{0}' but config file specified '{1}'")]
+    ConfigCliConflict(String, String),
 }
 
 #[derive(StructOpt, Debug)]
