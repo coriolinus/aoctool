@@ -1,25 +1,34 @@
 # `aoctool`: Advent of Code Downloader / Initializer
 
-This tool contains the necessary scaffolding to download Advent of Code input files and create Rust
-project templates.
+The AOC tool is an opinionated and configurable utility for handling the repetitive parts of
+Advent of Code in Rust.
 
-Windows is not supported except via WSL.
+It's intended to synergize nicely with my [`aoclib` support library](https://github.com/coriolinus/aoclib/),
+but there is no requirement that your implementation use that.
+
+The actual workflow for day 1 of 2021 might look like this:
+
+```bash
+$ # Initialize a new workspace for 2021
+$ aoc init-year --implementation adventofcode-2021 && cd adventofcode-2021
+adventofcode-2021$ # Set the session key, acquired from the browser's cookies
+adventofcode-2021$ aoc config set --session "$SESSION"
+adventofcode-2021$ # Initialize a new sub-crate called day01 from templates, and download the input file.
+adventofcode-2021$ aoc init
+adventofcode-2021$ # Fill in the day01/src/lib.rs:part1() function body using the editor of your choice. Then:
+adventofcode-2021$ cargo run -p day01
+adventofcode-2021$ # Fill in the day01/src/lib.rs:part2() function body using the editor of your choice. Then:
+adventofcode-2021$ cargo run -p day01 -- --part2 --no-part1
+```
+
+For each subsequent day, the only command required is `aoc init`.
 
 ## Installation
 
-### Simple
+Windows is only supported via WSL.
 
 ```sh
 cargo install --git "https://github.com/coriolinus/aoctool.git"
-```
-
-### Your Fork
-
-```sh
-git clone "https://github.com/coriolinus/aoctool.git" aoctool
-cd aoctool
-# optional: edit template, etc
-cargo install --path .
 ```
 
 ## Initial setup
@@ -74,3 +83,15 @@ like
 ```bash
 cargo run -p day01 -- --part2
 ```
+
+### Specifying the Templates
+
+By default, each day's exercise will be initialized with the templates stored [here](https://github.com/coriolinus/aoctool/tree/master/day-template).
+However, this behavior can be customized as desired. You can customize the directory where the templates are stored with
+
+```bash
+aoc config set --day-templates <path>
+```
+
+That path must be a directory containing three files: `Cargo.toml`, `src/lib.rs`, and `src/main.rs`. Those files can contain anything you like.
+The following expressions are evaluated within the template: `{year}`, `{day}`, `{package_name}`.
