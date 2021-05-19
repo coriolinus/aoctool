@@ -23,7 +23,10 @@ fn get_cargo_toml(config: &Config, year: u32) -> Result<(PathBuf, Document), Err
     if !cargo_toml_path.exists() {
         Err(Error::NoCargoToml)?;
     }
-    let manifest = Document::from_str(&std::fs::read_to_string(&cargo_toml_path)?)?;
+    let manifest = Document::from_str(
+        &std::fs::read_to_string(&cargo_toml_path)
+            .map_err(|err| Error::Io("reading Cargo.toml", err))?,
+    )?;
 
     Ok((cargo_toml_path, manifest))
 }
@@ -64,19 +67,22 @@ fn add_crate_to_workspace(
 
     members.push(crate_name).map_err(|_| Error::MalformedToml)?;
 
-    std::fs::write(cargo_toml_path, manifest.to_string_in_original_order())?;
+    std::fs::write(cargo_toml_path, manifest.to_string_in_original_order())
+        .map_err(|err| Error::Io("writing updated Cargo.toml", err))?;
     Ok(())
 }
 
 /// Ensure the template directory from the configuration exists and is initialized.
 fn ensure_template_dir(config: &Config, year: u32) -> Result<PathBuf, Error> {
     let template_dir = config.day_template(year);
-    if !template_dir.exists() {
-        std::fs::create_dir_all(&template_dir)?;
-    }
     for template in TEMPLATE_FILES {
         let template_path = template_dir.join(template);
         if !template_path.exists() {
+            // if we have a subdirectory of template_dir, like `crate/src/foo.rs`, this will ensure everything exists
+            if let Some(parent) = template_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|err| Error::Io("creating template parent directory", err))?;
+            }
             let url = format!(
                 "https://raw.githubusercontent.com/coriolinus/aoctool/master/day-template/{}",
                 template
@@ -95,7 +101,8 @@ fn ensure_template_dir(config: &Config, year: u32) -> Result<PathBuf, Error> {
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(template_path)?;
+                .open(template_path)
+                .map_err(|err| Error::Io("creating template file", err))?;
             response.copy_to(&mut file).map_err(Error::Downloading)?;
         }
     }
@@ -126,7 +133,8 @@ fn render_templates_into(
     let template_dir = ensure_template_dir(config, year)?;
     for template in TEMPLATE_FILES {
         let mut tt = TinyTemplate::new();
-        let template_text = std::fs::read_to_string(template_dir.join(template))?;
+        let template_text = std::fs::read_to_string(template_dir.join(template))
+            .map_err(|err| Error::Io("reading template file", err))?;
         tt.add_template(template, &template_text)
             .map_err(|err| Error::Template(err, template.to_string()))?;
         let rendered_text = tt
@@ -136,8 +144,10 @@ fn render_templates_into(
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(day_dir.join(template))?;
-        file.write_all(rendered_text.as_bytes())?;
+            .open(day_dir.join(template))
+            .map_err(|err| Error::Io("opening template destination for writing", err))?;
+        file.write_all(rendered_text.as_bytes())
+            .map_err(|err| Error::Io("writing rendered template", err))?;
     }
 
     Ok(())
@@ -166,7 +176,8 @@ pub fn initialize(
         // set up new sub-crate basics
         let day_name = format!("day{:02}", day);
         let day_dir = implementation_dir.join(&day_name);
-        std::fs::create_dir_all(day_dir.join("src"))?;
+        std::fs::create_dir_all(day_dir.join("src"))
+            .map_err(|err| Error::Io("creating day dir", err))?;
 
         // update the workspaces of this crate
         add_crate_to_workspace(&cargo_toml_path, &mut manifest, &day_name)?;
@@ -219,8 +230,10 @@ where
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(path)?;
-        file.write_all(&line)?;
+            .open(path)
+            .map_err(|err| Error::Io("opening for append", err))?;
+        file.write_all(&line)
+            .map_err(|err| Error::Io("appending", err))?;
     }
     Ok(())
 }
@@ -244,12 +257,22 @@ pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> R
                     // if we have a desired path and no appropriate path has already been configured,
                     // then:
                     if !desired_path.exists() {
-                        std::fs::create_dir_all(&desired_path)?;
+                        std::fs::create_dir_all(&desired_path)
+                            .map_err(|err| Error::Io("ensuring path dir", err))?;
                     }
-                    *path_destination = Some(desired_path.canonicalize()?);
+                    *path_destination = Some(
+                        desired_path
+                            .canonicalize()
+                            .map_err(|err| Error::Io("canonicalizing path destination", err))?,
+                    );
                 }
                 (Some(desired_path), Some(configured_path))
-                    if desired_path.absolutize()? != configured_path.absolutize()? =>
+                    if desired_path
+                        .absolutize()
+                        .map_err(|err| Error::Io("absolutizing desired path", err))?
+                        != configured_path
+                            .absolutize()
+                            .map_err(|err| Error::Io("absolutizing configured path", err))? =>
                 {
                     return Err(Error::ConfigCliConflict(
                         desired_path.display().to_string(),
@@ -280,7 +303,8 @@ pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> R
                 .map(|mut dir_iter| dir_iter.next().is_none())
                 .unwrap_or_default())
     {
-        std::fs::create_dir_all(&impl_path)?;
+        std::fs::create_dir_all(&impl_path)
+            .map_err(|err| Error::Io("creating implementation dir", err))?;
 
         // Create default .gitignore
         append_if_not_present(impl_path.join(".gitignore"), "/target/")?;
@@ -293,8 +317,8 @@ pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> R
             .open(impl_path.join("Cargo.toml"))
         {
             let mut buffer = BufWriter::new(file);
-            writeln!(&mut buffer, "[workspace]")?;
-            writeln!(&mut buffer, "members = []")?;
+            writeln!(&mut buffer, "[workspace]\nmembers = []")
+                .map_err(|err| Error::Io("writing default Cargo.toml", err))?;
         }
     }
 
@@ -320,8 +344,8 @@ pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> R
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
+    #[error("{0}")]
+    Io(&'static str, #[source] std::io::Error),
     #[error("Cargo.toml not found")]
     NoCargoToml,
     #[error("could not parse Cargo.toml")]
