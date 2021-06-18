@@ -1,5 +1,4 @@
 use aoclib::parse;
-
 use std::path::Path;
 
 pub fn part1(input: &Path) -> Result<(), Error> \{
@@ -14,4 +13,6 @@ pub fn part2(_input: &Path) -> Result<(), Error> \{
 pub enum Error \{
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error("No solution found")]
+    NoSolution,
 }
