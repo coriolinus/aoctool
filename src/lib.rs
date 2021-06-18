@@ -342,6 +342,14 @@ pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> R
     Ok(())
 }
 
+/// Clear the templates directory.
+///
+/// This can be useful when the templates have been updated.
+pub fn clear_templates(config: &Config, year: u32) -> Result<(), Error> {
+    std::fs::remove_dir_all(config.day_template(year))
+        .map_err(|err| Error::Io("attempting to clear templates", err))
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("{0}")]

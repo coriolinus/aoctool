@@ -71,15 +71,19 @@ enum Subcommand {
         #[structopt(flatten)]
         path_opts: PathOpts,
     },
+    /// Clear templates.
+    ClearTemplates {
+        #[structopt(flatten)]
+        year: Year,
+    }
 }
 
 impl Subcommand {
     fn run(self) -> Result<()> {
         match self {
-            Self::Config { cmd } => cmd.run(),
+            Self::Config { cmd } => cmd.run()?,
             Self::Url { date } => {
                 println!("{}", aoclib::website::url_for_day(date.year(), date.day()));
-                Ok(())
             }
             Self::Init {
                 date,
@@ -94,15 +98,20 @@ impl Subcommand {
                     skip_create_crate,
                     skip_get_input,
                 )?;
-                Ok(())
             }
             Self::InitYear { year, path_opts } => {
                 let mut config = Config::load().unwrap_or_default();
                 aoctool::initialize_year(&mut config, year.year(), path_opts)?;
                 config.save()?;
-                Ok(())
+            }
+            Self::ClearTemplates {
+                year,
+            } => {
+                let config = Config::load().unwrap_or_default();
+                aoctool::clear_templates(&config, year.year())?;
             }
         }
+        Ok(())
     }
 }
 
