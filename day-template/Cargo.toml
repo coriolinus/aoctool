@@ -2,7 +2,7 @@
 name = "{package_name}"
 version = "0.1.0"
 authors = ["Peter Goodspeed-Niklaus <peter.r.goodspeedniklaus@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 aoclib = \{ git = "https://github.com/coriolinus/aoclib.git" }
