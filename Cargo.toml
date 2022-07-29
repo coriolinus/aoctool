@@ -16,7 +16,7 @@ structopt = "0.3.21"
 thiserror = "1.0.22"
 tinytemplate = "1.1.0"
 toml = "0.5.8"
-toml_edit = "0.2.0"
+toml_edit = "0.14.4"
 
 [[bin]]
 name = "aoc"

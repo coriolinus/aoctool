@@ -36,21 +36,18 @@ fn add_crate_to_workspace(
     manifest: &mut Document,
     crate_name: &str,
 ) -> Result<(), Error> {
-    let root_table = manifest
-        .root
-        .as_table_mut()
-        .expect("document root is a table");
+    use toml_edit::{Array, Item, Table, Value};
 
-    let workspace = root_table.entry("workspace");
-    if workspace.is_none() {
-        *workspace = toml_edit::Item::Table(toml_edit::Table::new());
-    }
+    let root_table = manifest.as_table_mut();
+
+    let workspace = root_table
+        .entry("workspace")
+        .or_insert(Item::Table(Table::new()));
     let workspace = workspace.as_table_mut().ok_or(Error::MalformedToml)?;
 
-    let members = workspace.entry("members");
-    if members.is_none() {
-        *members = toml_edit::Item::Value(toml_edit::Value::Array(Default::default()));
-    }
+    let members = workspace
+        .entry("members")
+        .or_insert(Item::Value(Value::Array(Array::new())));
     let members = members
         .as_value_mut()
         .ok_or(Error::MalformedToml)?
@@ -65,9 +62,9 @@ fn add_crate_to_workspace(
         Err(Error::CrateAlreadyExists(crate_name.to_string()))?;
     }
 
-    members.push(crate_name).map_err(|_| Error::MalformedToml)?;
+    members.push(crate_name);
 
-    std::fs::write(cargo_toml_path, manifest.to_string_in_original_order())
+    std::fs::write(cargo_toml_path, manifest.to_string())
         .map_err(|err| Error::Io("writing updated Cargo.toml", err))?;
     Ok(())
 }
