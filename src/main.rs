@@ -1,14 +1,14 @@
 use aoclib::config::Config;
 use aoctool::PathOpts;
 use chrono::{Datelike, Local};
+use clap::{Args, Parser, Subcommand as DeriveSubcommand};
 use color_eyre::eyre::{bail, Result};
 use path_absolutize::Absolutize;
-use structopt::StructOpt;
 
-#[derive(StructOpt, Clone, Copy, Debug)]
+#[derive(Args, Clone, Copy, Debug)]
 struct Year {
     /// Year (default: this year)
-    #[structopt(short, long)]
+    #[arg(short, long)]
     year: Option<u32>,
 }
 
@@ -18,13 +18,13 @@ impl Year {
     }
 }
 
-#[derive(StructOpt, Clone, Copy, Debug)]
+#[derive(Args, Clone, Copy, Debug)]
 struct Date {
     /// Day (default: today's date)
-    #[structopt(short, long)]
+    #[arg(short, long)]
     day: Option<u8>,
 
-    #[structopt(flatten)]
+    #[command(flatten)]
     year: Year,
 }
 
@@ -38,44 +38,44 @@ impl Date {
     }
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(about = "advent of code tool")]
+#[derive(Parser, Debug)]
+#[clap(about = "advent of code tool")]
 enum Subcommand {
     /// Manage configuration
     Config {
-        #[structopt(subcommand)]
+        #[command(subcommand)]
         cmd: ConfigOpts,
     },
     /// Emit the URL to a specified puzzle
     Url {
-        #[structopt(flatten)]
+        #[command(flatten)]
         date: Date,
     },
     /// Initialize a puzzle
     Init {
-        #[structopt(flatten)]
+        #[command(flatten)]
         date: Date,
 
         /// Do not create a sub-crate for the requested day
-        #[structopt(long)]
+        #[arg(long)]
         skip_create_crate: bool,
 
         /// Do not attempt to fetch the input for the requested day
-        #[structopt(long)]
+        #[arg(long)]
         skip_get_input: bool,
     },
     /// Initialize a repository for a year's solutions
     InitYear {
-        #[structopt(flatten)]
+        #[command(flatten)]
         year: Year,
-        #[structopt(flatten)]
+        #[command(flatten)]
         path_opts: PathOpts,
     },
     /// Clear templates.
     ClearTemplates {
-        #[structopt(flatten)]
+        #[command(flatten)]
         year: Year,
-    }
+    },
 }
 
 impl Subcommand {
@@ -104,9 +104,7 @@ impl Subcommand {
                 aoctool::initialize_year(&mut config, year.year(), path_opts)?;
                 config.save()?;
             }
-            Self::ClearTemplates {
-                year,
-            } => {
+            Self::ClearTemplates { year } => {
                 let config = Config::load().unwrap_or_default();
                 aoctool::clear_templates(&config, year.year())?;
             }
@@ -115,7 +113,7 @@ impl Subcommand {
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(DeriveSubcommand, Debug)]
 enum ConfigOpts {
     /// Emit the path to the configuration file
     Path,
@@ -123,33 +121,33 @@ enum ConfigOpts {
     Show,
     /// Set configuration
     Set {
-        #[structopt(flatten)]
+        #[command(flatten)]
         year: Year,
 
         /// Website session key
         ///
         /// Log in to adventofcode.com and inspect the cookies to get this
-        #[structopt(short, long)]
+        #[arg(short, long)]
         session: Option<String>,
 
-        #[structopt(flatten)]
+        #[command(flatten)]
         path_opts: PathOpts,
     },
     /// Clear configuration
     Clear {
-        #[structopt(flatten)]
+        #[command(flatten)]
         year: Year,
 
         /// Clear path to input files.
-        #[structopt(long)]
+        #[arg(long)]
         input_files: bool,
 
         /// Clear path to this year's implementation directory.
-        #[structopt(long)]
+        #[arg(long)]
         implementation: bool,
 
         /// Clear path to this year's day template files.
-        #[structopt(long)]
+        #[arg(long)]
         day_template: bool,
     },
 }
@@ -225,6 +223,6 @@ impl ConfigOpts {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-    let opt = Subcommand::from_args();
+    let opt = Subcommand::parse();
     opt.run()
 }

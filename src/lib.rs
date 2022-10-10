@@ -1,3 +1,4 @@
+use clap::Args;
 use path_absolutize::Absolutize;
 use serde::Serialize;
 use std::{
@@ -5,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use structopt::StructOpt;
 use thiserror::Error;
 use tinytemplate::TinyTemplate;
 use toml_edit::Document;
@@ -377,17 +377,17 @@ pub enum Error {
     ConfigCliConflict(String, String),
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Args, Debug)]
 pub struct PathOpts {
     /// Path to input files. Default: "$(pwd)/inputs"
-    #[structopt(long, parse(from_os_str))]
+    #[arg(long)]
     pub input_files: Option<PathBuf>,
 
     /// Path to this year's implementation directory. Default: "$(pwd)"
-    #[structopt(long, parse(from_os_str))]
+    #[arg(long)]
     pub implementation: Option<PathBuf>,
 
     /// Path to this year's day template files.
-    #[structopt(long, parse(from_os_str))]
+    #[arg(long)]
     pub day_templates: Option<PathBuf>,
 }
