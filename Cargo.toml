@@ -6,17 +6,17 @@ edition = "2018"
 
 [dependencies]
 aoclib = { git = "https://github.com/coriolinus/aocutil.git" }
-chrono = "0.4.22"
-clap = { version = "4.0.11", features = ["derive"] }
+chrono = "0.4.24"
+clap = { version = "4.2.1", features = ["derive"] }
 color-eyre = "0.6.2"
-path-absolutize = "3.0.13"
+path-absolutize = "3.0.14"
 pathdiff = "0.2.1"
-reqwest = { version = "0.11.12", features = [ "blocking", "gzip" ] }
-serde = { version = "1.0.145", features = [ "derive" ] }
-thiserror = "1.0.37"
+reqwest = { version = "0.11.16", features = [ "blocking", "gzip" ] }
+serde = { version = "1.0.159", features = [ "derive" ] }
+thiserror = "1.0.40"
 tinytemplate = "1.2.1"
-toml = "0.5.9"
-toml_edit = "0.14.4"
+toml = "0.7.3"
+toml_edit = "0.19.8"
 
 [[bin]]
 name = "aoc"
