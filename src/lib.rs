@@ -254,7 +254,7 @@ pub fn initialize_year(config: &mut Config, year: u32, path_opts: PathOpts) -> R
                     // if we have a desired path and no appropriate path has already been configured,
                     // then:
                     if !desired_path.exists() {
-                        std::fs::create_dir_all(&desired_path)
+                        std::fs::create_dir_all(desired_path)
                             .map_err(|err| Error::Io("ensuring path dir", err))?;
                     }
                     *path_destination = Some(
