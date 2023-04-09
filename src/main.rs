@@ -1,20 +1,27 @@
 use aoclib::config::Config;
 use aoctool::PathOpts;
-use chrono::{Datelike, Local};
 use clap::{Args, Parser, Subcommand as DeriveSubcommand};
 use color_eyre::eyre::{bail, Result};
 use path_absolutize::Absolutize;
+use time::OffsetDateTime as DateTime;
 
-#[derive(Args, Clone, Copy, Debug)]
-struct Year {
-    /// Year (default: this year)
-    #[arg(short, long)]
-    year: Option<u32>,
+pub type Day = u8;
+pub type Year = u32;
+
+fn local() -> DateTime {
+    DateTime::now_local().expect("local system has determinable local offset")
 }
 
-impl Year {
-    fn year(self) -> u32 {
-        self.year.unwrap_or_else(|| Local::now().year() as u32)
+#[derive(Args, Clone, Copy, Debug)]
+struct YearArg {
+    /// Year (default: this year)
+    #[arg(short, long)]
+    year: Option<Year>,
+}
+
+impl YearArg {
+    fn year(self) -> Year {
+        self.year.unwrap_or_else(|| local().year() as Year)
     }
 }
 
@@ -22,18 +29,18 @@ impl Year {
 struct Date {
     /// Day (default: today's date)
     #[arg(short, long)]
-    day: Option<u8>,
+    day: Option<Day>,
 
     #[command(flatten)]
-    year: Year,
+    year: YearArg,
 }
 
 impl Date {
-    fn day(self) -> u8 {
-        self.day.unwrap_or_else(|| Local::now().day() as u8)
+    fn day(self) -> Day {
+        self.day.unwrap_or_else(|| local().day() as Day)
     }
 
-    fn year(self) -> u32 {
+    fn year(self) -> Year {
         self.year.year()
     }
 }
@@ -67,14 +74,14 @@ enum Subcommand {
     /// Initialize a repository for a year's solutions
     InitYear {
         #[command(flatten)]
-        year: Year,
+        year: YearArg,
         #[command(flatten)]
         path_opts: PathOpts,
     },
     /// Clear templates.
     ClearTemplates {
         #[command(flatten)]
-        year: Year,
+        year: YearArg,
     },
 }
 
@@ -122,7 +129,7 @@ enum ConfigOpts {
     /// Set configuration
     Set {
         #[command(flatten)]
-        year: Year,
+        year: YearArg,
 
         /// Website session key
         ///
@@ -136,7 +143,7 @@ enum ConfigOpts {
     /// Clear configuration
     Clear {
         #[command(flatten)]
-        year: Year,
+        year: YearArg,
 
         /// Clear path to input files.
         #[arg(long)]
