@@ -211,7 +211,7 @@ impl ConfigOpts {
                 day_template,
             } => {
                 let mut config = Config::load().unwrap_or_default();
-                let mut paths = config.paths.entry(year.year()).or_default();
+                let paths = config.paths.entry(year.year()).or_default();
                 if input_files {
                     paths.input_files = None;
                 }
