@@ -2,7 +2,7 @@
 name = "aoctool"
 version = "0.1.0"
 authors = ["Peter Goodspeed-Niklaus <peter.r.goodspeedniklaus@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 aoclib = { git = "https://github.com/coriolinus/aocutil.git" }
@@ -10,8 +10,8 @@ clap = { version = "4.4.8", features = ["derive"] }
 color-eyre = "0.6.2"
 path-absolutize = "3.1.1"
 pathdiff = "0.2.1"
-reqwest = { version = "0.11.22", features = [ "blocking", "gzip" ] }
-serde = { version = "1.0.192", features = [ "derive" ] }
+reqwest = { version = "0.11.22", features = ["blocking", "gzip"] }
+serde = { version = "1.0.192", features = ["derive"] }
 thiserror = "1.0.50"
 time = { version = "0.3.30", features = ["local-offset"] }
 tinytemplate = "1.2.1"
