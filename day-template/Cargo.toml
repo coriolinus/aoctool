@@ -6,6 +6,6 @@ edition = "2021"
 
 [dependencies]
 aoclib = \{ git = "https://github.com/coriolinus/aoclib.git" }
-clap = { version = "4.4.11", features = ["derive"] }
+clap = \{ version = "4.4.11", features = ["derive"] }
 color-eyre = "0.5.10"
 thiserror = "1.0.22"
