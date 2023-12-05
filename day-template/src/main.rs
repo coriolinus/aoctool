@@ -1,25 +1,26 @@
 use aoclib::\{config::Config, website::get_input};
 use {package_name}::\{part1, part2};
 
+use clap::Parser;
 use color_eyre::eyre::Result;
-use structopt::StructOpt;
 use std::path::PathBuf;
 
 const YEAR: u32 = {year};
 const DAY: u8 = {day};
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 struct RunArgs \{
     /// input file
-    #[structopt(long, parse(from_os_str))]
+    ///
+    /// when unset, defaults to `inputs/input-NN.txt`, where `NN` is the current day
     input: Option<PathBuf>,
 
     /// skip part 1
-    #[structopt(long)]
+    #[arg(long)]
     no_part1: bool,
 
     /// run part 2
-    #[structopt(long)]
+    #[arg(long)]
     part2: bool,
 }
 
@@ -40,7 +41,7 @@ impl RunArgs \{
 
 fn main() -> Result<()> \{
     color_eyre::install()?;
-    let args = RunArgs::from_args();
+    let args = RunArgs::parse();
     let input_path = args.input()?;
 
     if !args.no_part1 \{
